@@ -1,0 +1,91 @@
+module memory_game_top (
+    input  logic        clk,         // Board clock
+    input  logic        reset,       // Global reset, active high
+    input  logic        start_btn,   // New start button to begin a round.
+    input  logic        btnEnter,    // Button to confirm user input.
+    input  logic [15:0] sw,          // 16 switches for user input.
+    output logic [15:0] led,         // 16 LEDs to display the random pattern.
+    output logic [6:0]  seg,         // 7-seg segment outputs.
+    output logic [3:0]  an           // 7-seg digit enable outputs (active low)
+);
+
+    // Internal signals:
+    logic         btnEnter_debounced;
+    logic [15:0]  random_pattern;
+    logic [3:0]   current_level;
+    logic         new_round;       // Trigger to load a new pattern.
+    logic         fsm_pass;        // Indicates a correct guess.
+    logic         fsm_fail;        // Indicates an incorrect guess.
+    logic [2:0]   fsm_state;       // FSM state output (for debug/display).
+    logic         led_display_mode; // High when LED driver should display the pattern.
+
+        // Instantiate Debounce for btnEnter.
+        debounce #(.DELAY(500000)) btn_debounce_inst (
+        .clk(clk),
+        .reset(reset),
+        .btn_in(btnEnter),
+        .btn_out(btnEnter_debounced)
+    );
+
+        // Pattern Generator Instantiation.
+        pattern_generator pattern_gen_inst (
+        .clk(clk),
+        .reset(reset),
+        .load(new_round),  // Loads a new pattern when new_round pulses.
+        .pattern(random_pattern)
+    );
+    
+        // Accumulator for Level Count.
+        accumulator level_accumulator (
+        .clk(clk),
+        .reset(reset),
+        .en(fsm_pass),        // Increment level on a correct guess.
+        .level(current_level)
+    );
+  
+        // FSM Instantiation.
+        memory_game_fsm fsm_inst (
+        .clk(clk),
+        .reset(reset),
+        .start_btn(start_btn),          // Start button.
+        .btnEnter(btnEnter_debounced),  // Debounced enter button.
+        .user_input(sw),
+        .pattern(random_pattern),
+        .state(fsm_state),
+        .pass(fsm_pass),
+        .fail(fsm_fail),
+        .new_round(new_round),
+        .display_mode(led_display_mode)
+    );
+    
+        // LED Driver Instantiation.
+        led_driver led_driver_inst (
+        .pattern(random_pattern),
+        .display_mode(led_display_mode),
+        .leds(led)
+    );
+    
+    // Seven-Segment Display Integration.
+    logic [1:0] disp_mode;
+    always_comb begin
+        if (fsm_state == 3'd5)       // Assuming 3'd5 is PASS_ST.
+            disp_mode = 2'b01;       // Display "PASS".
+        else if (fsm_state == 3'd6)  // Assuming 3'd6 is FAIL_ST.
+            disp_mode = 2'b10;       // Display "FAIL".
+        else 
+            disp_mode = 2'b00;       // Otherwise, numeric mode.
+    end
+
+    // Instantiate the four-digit, multiplexed seven-segment display driver.
+    // This module (game_display_driver) instantiates four copies of your modified 
+    // seven_segment_driver (with mode and POSITION) and handles multiplexing.
+    game_display_driver display_inst (
+        .clk(clk),
+        .reset(reset),
+        .disp_mode(disp_mode),
+        .level(current_level),
+        .seg(seg),
+        .an(an)
+    );
+      
+endmodule
