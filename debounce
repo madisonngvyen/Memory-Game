@@ -1,0 +1,40 @@
+module debounce(
+   input logic clk,
+   input logic reset,
+   input logic btn_in,
+   output logic btn_out
+);
+    parameter integer DELAY = 500000; // Delay
+
+    logic [19:0] counter; // Counter width 
+    logic btn_sync_0, btn_sync_1;
+
+    // Synchronize button input to the clock domain
+    always_ff @(posedge clk or posedge reset) begin
+       if (reset) begin
+          btn_sync_0 <= 1'b0;
+          btn_sync_1 <= 1'b0;
+       end else begin
+          btn_sync_0 <= btn_in;
+          btn_sync_1 <= btn_sync_0;
+       end
+    end
+
+    // Simple debounce logic using a counter
+    always_ff @(posedge clk or posedge reset) begin
+       if (reset) begin
+          counter <= 0;
+          btn_out <= 1'b0;
+       end else begin
+          if (btn_sync_1 == btn_out)
+              counter <= 0;
+          else begin
+              counter <= counter + 1;
+              if (counter >= DELAY) begin
+                 btn_out <= btn_sync_1;
+                 counter <= 0;
+              end
+          end
+       end
+    end
+endmodule
