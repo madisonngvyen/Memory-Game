@@ -1,0 +1,12 @@
+module led_driver(
+    input logic [15:0] pattern,
+    input logic display_mode,   // 1: show pattern; 0: turn off LEDs
+    output logic [15:0] leds
+);
+    always_comb begin
+        if (display_mode)
+            leds = pattern;
+        else
+            leds = 16'b0;
+    end
+endmodule
