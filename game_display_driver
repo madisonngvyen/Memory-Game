@@ -1,0 +1,94 @@
+module game_display_driver(
+    input  logic        clk,
+    input  logic        reset,
+    input  logic [1:0]  disp_mode,  // 2'b00: Numeric mode; 2'b01: "PASS"; 2'b10: "FAIL"
+    input  logic [3:0]  level,      // The numeric level to display in numeric mode
+    output logic [6:0]  seg,        // Shared 7-seg segment outputs
+    output logic [3:0]  an          // Digit enable outputs (active low)
+);
+
+    // Wires for each digit's segment output.
+    wire [6:0] seg0, seg1, seg2, seg3;
+    // In numeric mode, define the digit to show. 
+    logic [3:0] digit0, digit1, digit2, digit3;
+    
+    // When in numeric mode, only the last digit shows the level.
+    always_comb begin
+      if(disp_mode == 2'b00) begin
+         digit0 = 4'd15; // Blank digit (your driver can interpret, e.g., 15 as blank)
+         digit1 = 4'd15;
+         digit2 = 4'd15;
+         digit3 = level; // Show current level on rightmost digit
+      end
+      else begin
+         // In message modes, the digit inputs are ignored.
+         digit0 = 4'd0;
+         digit1 = 4'd0;
+         digit2 = 4'd0;
+         digit3 = 4'd0;
+      end
+    end
+    
+    // Instantiate the four seven-segment driver modules:
+    seven_segment_driver #(.POSITION(0)) sseg0 (
+         .digit(digit0),
+         .mode(disp_mode),
+         .seg(seg0)
+    );
+    seven_segment_driver #(.POSITION(1)) sseg1 (
+         .digit(digit1),
+         .mode(disp_mode),
+         .seg(seg1)
+    );
+    seven_segment_driver #(.POSITION(2)) sseg2 (
+         .digit(digit2),
+         .mode(disp_mode),
+         .seg(seg2)
+    );  
+    seven_segment_driver #(.POSITION(3)) sseg3 (
+         .digit(digit3),
+         .mode(disp_mode),
+         .seg(seg3)
+    );
+    
+    // Multiplexing logic to drive the four digits.
+    reg [15:0] mux_divider;
+    reg [1:0]  m_cnt;
+    
+    always @(posedge clk or posedge reset) begin
+         if(reset) begin
+             mux_divider <= 0;
+             m_cnt       <= 0;
+         end else begin
+             mux_divider <= mux_divider + 1;
+             // Update m_cnt when the divider rolls over:
+             if(mux_divider == 0)
+                 m_cnt <= m_cnt + 1;
+         end
+    end
+    
+    always_comb begin
+       case(m_cnt)
+         2'b00: begin
+             seg = seg0;
+             an  = 4'b1110; // Enable digit 0 (active low)
+         end
+         2'b01: begin
+             seg = seg1;
+             an  = 4'b1101; // Enable digit 1
+         end
+         2'b10: begin
+             seg = seg2;
+             an  = 4'b1011; // Enable digit 2
+         end
+         2'b11: begin
+             seg = seg3;
+             an  = 4'b0111; // Enable digit 3
+         end
+         default: begin
+             seg = seg3;
+             an  = 4'b0111;
+         end
+       endcase
+    end
+endmodule
