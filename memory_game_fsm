@@ -1,0 +1,119 @@
+module memory_game_fsm (
+    input  logic         clk,
+    input  logic         reset,
+    input  logic         start_btn,
+    input  logic         btnEnter,
+    input  logic [15:0]  user_input,
+    input  logic [15:0]  pattern,
+    output logic [2:0]   state,
+    output logic         pass,
+    output logic         fail,
+    output logic         new_round,
+    output logic         display_mode
+);
+
+    typedef enum logic [2:0] {
+        IDLE     = 3'd0,
+        WAIT     = 3'd1,
+        DISPLAY  = 3'd2,
+        INPUT    = 3'd3,
+        EVALUATE = 3'd4,
+        PASS_ST  = 3'd5,
+        FAIL_ST  = 3'd6
+    } state_t;
+    
+    state_t current_state, next_state;
+    parameter int WAIT_DELAY = 250_000_000;
+    parameter int DISP_DELAY = 250_000_000; // 2.5 seconds
+    parameter int PASS_DELAY = 250_000_000;
+    
+    logic [31:0] counter;
+
+    // State and counter logic
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            current_state <= IDLE;
+            counter       <= 0;
+        end else begin
+            if (current_state == next_state) begin
+                if ((current_state == WAIT) || (current_state == DISPLAY) || (current_state == PASS_ST))
+                    counter <= counter + 1;
+                else
+                    counter <= 0;
+            end else begin
+                counter <= 0;
+            end
+            current_state <= next_state;
+        end
+    end
+
+    // One-cycle pass pulse
+    logic pass_pulse;
+
+    always_comb begin
+        next_state   = current_state;
+        pass_pulse   = 1'b0;
+        fail         = 1'b0;
+        new_round    = 1'b0;
+        display_mode = 1'b0;
+
+        unique case (current_state)
+            IDLE: begin
+                if (start_btn)
+                    next_state = WAIT;
+            end
+
+            WAIT: begin
+                if (counter >= WAIT_DELAY)
+                    next_state = DISPLAY;
+            end
+
+            DISPLAY: begin
+                display_mode = 1'b1;
+                if (counter == 0)
+                    new_round = 1'b1;
+                if (counter >= DISP_DELAY)
+                    next_state = INPUT;
+            end
+
+            INPUT: begin
+                if (btnEnter)
+                    next_state = EVALUATE;
+            end
+
+            EVALUATE: begin
+                if (user_input == pattern) begin
+                    pass_pulse = 1'b1;
+                    next_state = PASS_ST;
+                end else begin
+                    fail       = 1'b1;
+                    next_state = FAIL_ST;
+                end
+            end
+
+            PASS_ST: begin
+                if (counter >= PASS_DELAY)
+                    next_state = WAIT;
+            end
+
+            FAIL_ST: begin
+                fail = 1'b1;
+                next_state = FAIL_ST;
+            end
+
+            default: next_state = IDLE;
+        endcase
+    end
+
+    // Assign state output
+    assign state = current_state;
+
+    // Output pass is only high for 1 cycle on EVALUATE -> PASS_ST
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset)
+            pass <= 1'b0;
+        else
+            pass <= pass_pulse;
+    end
+
+endmodule
